@@ -25,8 +25,7 @@ import xbmcplugin
 from xbmcgui import ListItem
 from requests import HTTPError
 from lib import tidalapi
-from lib.tidalapi.models import Album, Artist
-from lib.tidalapi import Quality
+from lib.tidalapi.models import Album, Artist, Video, Quality, SubscriptionType
 from routing import Plugin
 
 addon = xbmcaddon.Addon()
@@ -35,15 +34,19 @@ plugin.name = addon.getAddonInfo('name')
 
 _addon_id = addon.getAddonInfo('id')
 
-config = tidalapi.Config(quality=[Quality.lossless, Quality.high, Quality.low][int('0' + addon.getSetting('quality'))])
+_subscription_type = [SubscriptionType.hifi, SubscriptionType.premium][int('0' + addon.getSetting('subscription_type'))]
+_quality = [Quality.lossless, Quality.high, Quality.low][int('0' + addon.getSetting('quality'))]
+
+config = tidalapi.Config(quality=_quality)
 session = tidalapi.Session(config=config)
 
 is_logged_in = False
 _session_id = addon.getSetting('session_id')
+_api_session_id = addon.getSetting('api_session_id')
 _country_code = addon.getSetting('country_code')
 _user_id = addon.getSetting('user_id')
-if _session_id and _country_code and _user_id:
-    session.load_session(session_id=_session_id, country_code=_country_code, user_id=_user_id)
+if _session_id and _api_session_id and _country_code and _user_id:
+    session.load_session(session_id=_session_id, country_code=_country_code, user_id=_user_id, subscription_type=_subscription_type, api_session_id=_api_session_id)
     is_logged_in = True
 
 
@@ -54,51 +57,81 @@ def log(msg):
 def view(data_items, urls, end=True):
     list_items = []
     for item, url in zip(data_items, urls):
-        li = ListItem(item.name)
         info = {'title': item.name}
+        li = ListItem(item.name if not isinstance(item, Album) else '%s - %s' % (item.artist.name, item.title))
         if isinstance(item, Album):
             info.update({'album': item.name, 'artist': item.artist.name})
-            if item.release_date:
-                info['year'] = item.release_date.year
+            if getattr(item, 'year', None):
+                info['year'] = item.year
         elif isinstance(item, Artist):
             info.update({'artist': item.name})
         li.setInfo('music', info)
+        artwork = {}
         if getattr(item, 'image', None):
-            li.setThumbnailImage(item.image)
+            artwork['thumb'] = item.image
+        if getattr(item, 'fanart', None):
+            artwork['fanart'] = item.fanart
+        if artwork:
+            li.setArt(artwork)
         list_items.append((url, li, True))
     xbmcplugin.addDirectoryItems(plugin.handle, list_items)
     if end:
         xbmcplugin.endOfDirectory(plugin.handle)
 
 
-def track_list(tracks):
-    xbmcplugin.setContent(plugin.handle, 'songs')
+def track_list(tracks, content='songs', end=True):
+    if content:
+        xbmcplugin.setContent(plugin.handle, content)
     list_items = []
     for track in tracks:
-        if not track.available:
+        if not getattr(track, 'available', True):
             continue
-        url = plugin.url_for(play, track_id=track.id)
-        li = ListItem(track.name)
-        li.setProperty('isplayable', 'true')
-        li.setInfo('music', {
-            'title': track.name,
-            'tracknumber': track.track_num,
-            'discnumber': track.disc_num,
-            'artist': track.artist.name,
-            'album': track.album.name,
-            'year': track.album.release_date.year if track.album.release_date else None,
-        })
-        if track.album:
-            li.setThumbnailImage(track.album.image)
-        radio_url = plugin.url_for(track_radio, track_id=track.id)
-        li.addContextMenuItems(
-            [('Track Radio', 'XBMC.Container.Update(%s)' % radio_url,)])
+        label = '%s - %s' % (track.artist.name, track.name)
+        if track.explicit and not 'Explicit' in label:
+            label += ' (Explicit)'
+        if isinstance(track, Video):
+            url = plugin.url_for(play_video, video_id=track.id)
+            li = ListItem(label)
+            li.setProperty('isplayable', 'true')
+            li.setInfo('video', {
+                'artist': [track.artist.name],
+                'title': track.title,
+                'year': track.year,
+                'plotoutline': '%s - %s' % (track.artist.name, track.name)
+            })
+            li.addStreamInfo('video', { 'codec': 'h264', 'aspect': 1.78, 'width': 1920,
+                             'height': 1080, 'duration': track.duration if session.is_logged_in else 30})
+            li.addStreamInfo('audio', { 'codec': 'AAC', 'language': 'en', 'channels': 2 })
+        else:
+            url = plugin.url_for(play_track, track_id=track.id)
+            li = ListItem(label)
+            li.setProperty('isplayable', 'true')
+            li.setInfo('music', {
+                'title': track.title,
+                'tracknumber': track.trackNumber,
+                'discnumber': track.volumeNumber,
+                'duration': track.duration if session.is_logged_in else 30,
+                'artist': track.artist.name,
+                'album': track.album.title,
+                'year': track.album.year,
+            })
+            radio_url = plugin.url_for(track_radio, track_id=track.id)
+            li.addContextMenuItems(
+                [('Track Radio', 'XBMC.Container.Update(%s)' % radio_url,)])
+        artwork = {}
+        if getattr(track, 'image', None):
+            artwork['thumb'] = track.image
+        if getattr(track, 'fanart', None):
+            artwork['fanart'] = track.fanart
+        if artwork:
+            li.setArt(artwork)
         list_items.append((url, li, False))
     xbmcplugin.addDirectoryItems(plugin.handle, list_items)
-    xbmcplugin.endOfDirectory(plugin.handle)
+    if end:
+        xbmcplugin.endOfDirectory(plugin.handle)
 
 
-def add_directory(title, endpoint,):
+def add_directory(title, endpoint):
     if callable(endpoint):
         endpoint = plugin.url_for(endpoint)
     xbmcplugin.addDirectoryItem(plugin.handle, endpoint, ListItem(title), True)
@@ -112,20 +145,35 @@ def urls_from_id(view_func, items):
 def root():
     if is_logged_in:
         add_directory('My Music', my_music)
-        add_directory('Featured Playlists', featured_playlists)
-        add_directory("What's New", whats_new)
-        add_directory('Genres', genres)
-        add_directory('Moods', moods)
-        add_directory('Search', search)
+    add_directory('Featured Playlists', featured_playlists)
+    add_directory("What's New", whats_new)
+    add_directory('Movies', movies)
+    add_directory('Shows', shows)
+    add_directory('Genres', genres)
+    add_directory('Moods', moods)
+    add_directory('Search', search)
+    if is_logged_in:
         add_directory('Logout', logout)
     else:
-        add_directory('Login', login)
+        add_directory('Login (Trial Mode active !)', login)
     xbmcplugin.endOfDirectory(plugin.handle)
 
 
 @plugin.route('/track_radio/<track_id>')
 def track_radio(track_id):
     track_list(session.get_track_radio(track_id))
+
+
+@plugin.route('/movies')
+def movies():
+    items = session.get_movies()
+    track_list(items, content='musicvideos')
+
+
+@plugin.route('/shows')
+def shows():
+    items = session.get_shows()
+    view(items, urls_from_id(playlist_view, items))
 
 
 @plugin.route('/moods')
@@ -151,6 +199,7 @@ def genre_view(genre_id):
     add_directory('Playlists', plugin.url_for(genre_playlists, genre_id=genre_id))
     add_directory('Albums', plugin.url_for(genre_albums, genre_id=genre_id))
     add_directory('Tracks', plugin.url_for(genre_tracks, genre_id=genre_id))
+    add_directory('Videos', plugin.url_for(genre_videos, genre_id=genre_id))
     xbmcplugin.endOfDirectory(plugin.handle)
 
 
@@ -173,6 +222,12 @@ def genre_tracks(genre_id):
     track_list(items)
 
 
+@plugin.route('/genre/<genre_id>/videos')
+def genre_videos(genre_id):
+    items = session.get_genre_items(genre_id, 'videos')
+    track_list(items, content='musicvideos')
+
+
 @plugin.route('/featured_playlists')
 def featured_playlists():
     items = session.get_featured()
@@ -184,15 +239,19 @@ def whats_new():
     add_directory('Recommended Playlists', plugin.url_for(featured, group='recommended', content_type='playlists'))
     add_directory('Recommended Albums', plugin.url_for(featured, group='recommended', content_type='albums'))
     add_directory('Recommended Tracks', plugin.url_for(featured, group='recommended', content_type='tracks'))
+    add_directory('Recommended Videos', plugin.url_for(featured, group='recommended', content_type='videos'))
     add_directory('New Playlists', plugin.url_for(featured, group='new', content_type='playlists'))
     add_directory('New Albums', plugin.url_for(featured, group='new', content_type='albums'))
     add_directory('New Tracks', plugin.url_for(featured, group='new', content_type='tracks'))
+    add_directory('New Videos', plugin.url_for(featured, group='new', content_type='videos'))
     add_directory('Top Albums', plugin.url_for(featured, group='top', content_type='albums'))
     add_directory('Top Tracks', plugin.url_for(featured, group='top', content_type='tracks'))
+    add_directory('Top Videos', plugin.url_for(featured, group='top', content_type='videos'))
     if session.country_code != 'US':
         add_directory('Local Playlists', plugin.url_for(featured, group='local', content_type='playlists'))
         add_directory('Local Albums', plugin.url_for(featured, group='local', content_type='albums'))
         add_directory('Local Tracks', plugin.url_for(featured, group='local', content_type='tracks'))
+        add_directory('Local Videos', plugin.url_for(featured, group='local', content_type='videos'))
     xbmcplugin.endOfDirectory(plugin.handle)
 
 
@@ -201,6 +260,8 @@ def featured(group=None, content_type=None):
     items = session.get_featured_items(content_type, group)
     if content_type == 'tracks':
         track_list(items)
+    elif content_type == 'videos':
+        track_list(items, content='musicvideos')
     elif content_type == 'albums':
         xbmcplugin.setContent(plugin.handle, 'albums')
         view(items, urls_from_id(album_view, items))
@@ -215,6 +276,7 @@ def my_music():
     add_directory('Favourite Artists', favourite_artists)
     add_directory('Favourite Albums', favourite_albums)
     add_directory('Favourite Tracks', favourite_tracks)
+    add_directory('Favourite Videos', favourite_videos)
     xbmcplugin.endOfDirectory(plugin.handle)
 
 
@@ -264,7 +326,7 @@ def similar_artists(artist_id):
 
 @plugin.route('/playlist/<playlist_id>')
 def playlist_view(playlist_id):
-    track_list(session.get_playlist_tracks(playlist_id))
+    track_list(session.get_playlist_items(playlist_id))
 
 
 @plugin.route('/user_playlists')
@@ -298,12 +360,18 @@ def favourite_tracks():
     track_list(session.user.favorites.tracks())
 
 
+@plugin.route('/favourite_videos')
+def favourite_videos():
+    track_list(session.user.favorites.videos(), content='musicvideos')
+
+
 @plugin.route('/search')
 def search():
     add_directory('Artist', plugin.url_for(search_type, field='artist'))
     add_directory('Album', plugin.url_for(search_type, field='album'))
     add_directory('Playlist', plugin.url_for(search_type, field='playlist'))
     add_directory('Track', plugin.url_for(search_type, field='track'))
+    add_directory('Videos', plugin.url_for(search_type, field='video'))
     xbmcplugin.endOfDirectory(plugin.handle)
 
 
@@ -318,13 +386,15 @@ def search_type(field):
             view(searchresults.artists, urls_from_id(artist_view, searchresults.artists), end=False)
             view(searchresults.albums, urls_from_id(album_view, searchresults.albums), end=False)
             view(searchresults.playlists, urls_from_id(playlist_view, searchresults.playlists), end=False)
-            track_list(searchresults.tracks)
+            track_list(searchresults.tracks, end=False)
+            track_list(searchresults.videos, content=None, end=True)
 
 
 @plugin.route('/login')
 def login():
     username = addon.getSetting('username')
     password = addon.getSetting('password')
+    subscription_type = [SubscriptionType.hifi, SubscriptionType.premium][int('0' + addon.getSetting('subscription_type'))]
 
     if not username or not password:
         # Ask for username/password
@@ -335,11 +405,16 @@ def login():
         password = dialog.input('Password', option=xbmcgui.ALPHANUM_HIDE_INPUT)
         if not password:
             return
+        subscription_type = dialog.select('Subscription Type', [SubscriptionType.hifi, SubscriptionType.premium])
+        if not subscription_type:
+            return
 
     if session.login(username, password):
         addon.setSetting('session_id', session.session_id)
+        addon.setSetting('api_session_id', session.api_session_id)
         addon.setSetting('country_code', session.country_code)
         addon.setSetting('user_id', unicode(session.user.id))
+        addon.setSetting('subscription_type', '0' if session.user.subscription.type == SubscriptionType.hifi else '1')
 
         if not addon.getSetting('username') or not addon.getSetting('password'):
             # Ask about remembering username/password
@@ -347,16 +422,23 @@ def login():
             if dialog.yesno(plugin.name, 'Remember login details?'):
                 addon.setSetting('username', username)
                 addon.setSetting('password', password)
+    xbmc.executebuiltin('XBMC.Container.Refresh()')
+
 
 @plugin.route('/logout')
 def logout():
     addon.setSetting('session_id', '')
-    addon.setSetting('country_code', '')
+    addon.setSetting('api_session_id', '')
+    # Keep Country Code
+    #addon.setSetting('country_code', '')
     addon.setSetting('user_id', '')
+    # Keep Subscription Type
+    #addon.setSetting('subscription_type', '')
+    xbmc.executebuiltin('XBMC.Container.Refresh()')
 
 
-@plugin.route('/play/<track_id>')
-def play(track_id):
+@plugin.route('/play_track/<track_id>')
+def play_track(track_id):
     media_url = session.get_media_url(track_id)
     if not media_url.startswith('http://') and not media_url.startswith('https://'):
         log("media url: %s" % media_url)
@@ -366,6 +448,14 @@ def play(track_id):
     li = ListItem(path=media_url)
     mimetype = 'audio/flac' if config.quality == Quality.lossless else 'audio/mpeg'
     li.setProperty('mimetype', mimetype)
+    xbmcplugin.setResolvedUrl(plugin.handle, True, li)
+
+
+@plugin.route('/play_video/<video_id>')
+def play_video(video_id):
+    media_url = session.get_video_url(video_id)
+    li = ListItem(path=media_url)
+    li.setProperty('mimetype', 'video/mp4')
     xbmcplugin.setResolvedUrl(plugin.handle, True, li)
 
 
