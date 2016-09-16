@@ -42,6 +42,7 @@ class Config(object):
         self.api_token = 'wdgaB1CilGA-S_s2'     # Web Token, Plays m4a and Videos, Lossless audio is encrypted
         self.flac_token = 'P5Xbeo5LFvESeDy6'    # Plays FLAC, m4a and Videos, but Playlist Items are audio only
         self.flac_token2 = '4zx46pyr9o8qZNRw'   # This seems to be an old Token, many Lossless streams don't work
+        self.flac_token3 = '_KM2HixcUBZtmktH'   # Other old Token that don't work anymore
         self.preview_token = "8C7kRFdkaRp0dLBp" # Token for Preview Mode
 
 
@@ -110,15 +111,6 @@ class Session(object):
                 except:
                     msg = r.reason
                 log.error(msg)
-                # If first Lossless Token doesn't work, try the second one
-                headers = { "X-Tidal-Token": self._config.flac_token2 }
-                r = requests.post(url, data=payload, headers=headers)
-                if not r.ok:
-                    try:
-                        msg = r.json().get('userMessage')
-                    except:
-                        msg = r.reason
-                    log.error(msg)
             if r.ok:
                 # Take the second session
                 self.session_id = r.json()['sessionId']
