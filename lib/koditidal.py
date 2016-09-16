@@ -24,8 +24,10 @@ import xbmcgui
 import xbmcaddon
 from xbmcgui import ListItem
 from routing import Plugin
-from tidalapi import Config, Session, Quality, SubscriptionType, Artist, Album, PlayableMedia, Track, Video, Playlist, Promotion, Category
+from tidalapi import Config, Session
+from tidalapi.models import Quality, SubscriptionType, BrowsableMedia, Artist, Album, PlayableMedia, Track, Video, Playlist, Promotion, Category
 from m3u8 import load as m3u8_load
+
 
 addon = xbmcaddon.Addon()
 plugin = Plugin()
@@ -159,7 +161,8 @@ class PlaylistItem(Playlist, HasListItem):
         url = plugin.url_for_path('/playlist/%s' % self.id)
         li.setInfo('music', {
             'artist': self.title,
-            'album': self.description
+            'album': self.description,
+            'title': _T(30243).format(tracks=self.numberOfTracks, videos=self.numberOfVideos)
         })
         cm = []
         if self._is_logged_in:
@@ -360,7 +363,7 @@ class CategoryItem(Category, HasListItem):
         self.__dict__.update(vars(item))
 
     def getLabel(self):
-        return self._label if self._label else  _P(self.path, self.name)
+        return self._label
 
     def getListItems(self):
         content_types = self.content_types
@@ -368,7 +371,11 @@ class CategoryItem(Category, HasListItem):
         if len(content_types) > 1 and self._group in ['moods', 'genres'] and not self._force_subfolders:
             # Use sub folders for multiple Content Types
             url = plugin.url_for_path('/category/%s/%s' % (self._group, self.path))
+            self._label = _P(self.path, self.name)
             li = HasListItem.getListItem(self)
+            li.setInfo('music', {
+                'artist': self._label
+            })
             items.append((url, li, True))
         else:
             for content_type in content_types:
@@ -384,8 +391,29 @@ class CategoryItem(Category, HasListItem):
                     # Use Path as folder because content type is shows as sub foldes
                     self._label = _P(self.path, self.name)
                 li = HasListItem.getListItem(self)
+                li.setInfo('music', {
+                    'artist': _P(self.path, self.name),
+                    'album': _P(content_type)
+                })
                 items.append((url, li, True))
         return items
+
+
+class FolderItem(BrowsableMedia, HasListItem):
+
+    def __init__(self, label, url):
+        self.name = label
+        self._url = url
+
+    def getLabel(self):
+        return self.name
+
+    def getListItem(self):
+        li = HasListItem.getListItem(self)
+        li.setInfo('music', {
+            'artist': self.name
+        })
+        return (self._url, li, True)
 
 
 # Session from the TIDAL-API to parse Items into Kodi List Items

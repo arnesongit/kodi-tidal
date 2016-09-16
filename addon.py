@@ -17,7 +17,6 @@
 
 from __future__ import unicode_literals
 
-import os
 import traceback
 import logging
 import xbmc
@@ -25,18 +24,15 @@ import xbmcgui
 import xbmcplugin
 from xbmcgui import ListItem
 from requests import HTTPError
-from lib.tidalapi.models import Quality, Category, BrowsableMedia,\
-    SubscriptionType
-from lib.koditidal import plugin, addon, _T, _P, log, KodiLogHandler, TidalSession
+from lib.tidalapi.models import Quality, Category, BrowsableMedia, SubscriptionType
+from lib.koditidal import plugin, addon, _T, _P, log, KodiLogHandler
+from lib.koditidal import TidalSession, FolderItem
 
-_addon_id = addon.getAddonInfo('id')
-_addon_icon = os.path.join(addon.getAddonInfo('path'), 'icon.png')
-_addon_fanart = os.path.join(addon.getAddonInfo('path'), 'fanart.jpg')
 
 # Set Log Handler for tidalapi
 logger = logging.getLogger()
 logger.addHandler(KodiLogHandler())
-# logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.DEBUG)
 
 # This is the Tidal Session
 session = TidalSession()
@@ -66,9 +62,8 @@ def add_items(items, content=None, end=True):
 def add_directory(title, endpoint, thumb=None, fanart=None):
     if callable(endpoint):
         endpoint = plugin.url_for(endpoint)
-    li = ListItem(title)
-    li.setArt({'thumb': thumb if thumb else _addon_icon, 'fanart': fanart if fanart else _addon_fanart})
-    xbmcplugin.addDirectoryItem(plugin.handle, endpoint, li, True)
+    item = FolderItem(title, endpoint)
+    add_items([item], end=False)
 
 
 @plugin.route('/')

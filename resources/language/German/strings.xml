@@ -84,5 +84,6 @@
     <string id="30240">Aus Playliste entfernen</string>
     <string id="30241">Soll Titel Nr. %s aus der Playliste entfernt werden ?</string>
     <string id="30242">Stream ist gesperrt !</string>
+    <string id="30243">Tracks:{tracks} / Videos:{videos}</string>
 
 </strings>

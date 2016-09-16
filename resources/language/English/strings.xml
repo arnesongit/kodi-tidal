@@ -83,5 +83,6 @@
     <string id="30240">Remove from Playlist</string>
     <string id="30241">Are you sure to remove item number %s from this playlist ?</string>
     <string id="30242">Stream not available !</string>
+    <string id="30243">Tracks:{tracks} / Videos:{videos}</string>
 
 </strings>
