@@ -87,8 +87,8 @@ class HasListItem(object):
             artwork['fanart'] = self.fanart
         li.setArt(artwork)
         # In Favorites View everything is a Favorite
-        if self._is_logged_in and hasattr(self, '_isFavorite'):
-            self._isFavorite = '/favorites/' in sys.argv[0]
+        if self._is_logged_in and hasattr(self, '_isFavorite') and '/favorites/' in sys.argv[0]:
+            self._isFavorite = True
         return li
 
 
@@ -401,9 +401,11 @@ class CategoryItem(Category, HasListItem):
 
 class FolderItem(BrowsableMedia, HasListItem):
 
-    def __init__(self, label, url):
+    def __init__(self, label, url, thumb=None, fanart=None):
         self.name = label
         self._url = url
+        self._thumb = thumb
+        self._fanart = fanart
 
     def getLabel(self):
         return self.name
@@ -414,6 +416,14 @@ class FolderItem(BrowsableMedia, HasListItem):
             'artist': self.name
         })
         return (self._url, li, True)
+
+    @property
+    def image(self):
+        return self._thumb if self._thumb else HasListItem.image
+
+    @property
+    def fanart(self):
+        return self._fanart if self._fanart else HasListItem.fanart
 
 
 # Session from the TIDAL-API to parse Items into Kodi List Items
@@ -430,6 +440,7 @@ class TidalConfig(Config):
         self.subscription_type = [SubscriptionType.hifi, SubscriptionType.premium][int('0' + addon.getSetting('subscription_type'))]
         self.quality = [Quality.lossless, Quality.high, Quality.low][int('0' + addon.getSetting('quality'))]
         self.maxVideoHeight = [9999, 1080, 720, 540, 480, 360, 240][int('0%s' % addon.getSetting('video_quality'))]
+        self.pageSize = max(10, min(999, int('0%s' % addon.getSetting('page_size'))))
 
 
 class TidalSession(Session):
@@ -548,20 +559,24 @@ class TidalSession(Session):
 
 class KodiLogHandler(logging.StreamHandler):
 
-    def __init__(self):
+    def __init__(self, modules):
         logging.StreamHandler.__init__(self)
-        addon_id = xbmcaddon.Addon().getAddonInfo('id')
+        self._modules = modules
+        addon_id = xbmcaddon.Addon().getAddonInfo('name')
         prefix = b"[%s] " % addon_id
         formatter = logging.Formatter(prefix + b'%(name)s: %(message)s')
         self.setFormatter(formatter)
 
     def emit(self, record):
+        if record.levelno < logging.WARNING and self._modules and not record.name in self._modules:
+            # Log INFO and DEBUG only with enabled modules
+            return 
         levels = {
             logging.CRITICAL: xbmc.LOGFATAL,
             logging.ERROR: xbmc.LOGERROR,
             logging.WARNING: xbmc.LOGWARNING,
-            logging.INFO: xbmc.LOGINFO,
-            logging.DEBUG: xbmc.LOGDEBUG,
+            logging.INFO: xbmc.LOGDEBUG,
+            logging.DEBUG: xbmc.LOGSEVERE,
             logging.NOTSET: xbmc.LOGNONE,
         }
         try:

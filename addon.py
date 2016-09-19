@@ -17,8 +17,10 @@
 
 from __future__ import unicode_literals
 
+import sys
 import traceback
 import logging
+from urlparse import urlsplit
 import xbmc
 import xbmcgui
 import xbmcplugin
@@ -31,15 +33,15 @@ from lib.koditidal import TidalSession, FolderItem
 
 # Set Log Handler for tidalapi
 logger = logging.getLogger()
-logger.addHandler(KodiLogHandler())
-logger.setLevel(logging.DEBUG)
+logger.addHandler(KodiLogHandler(modules=['lib.tidalapi']))
+# logger.setLevel(logging.DEBUG)
 
 # This is the Tidal Session
 session = TidalSession()
 session.load_session()
 
 
-def add_items(items, content=None, end=True):
+def add_items(items, content=None, end=True, withNextPage=False):
     if content:
         xbmcplugin.setContent(plugin.handle, content)
     list_items = []
@@ -53,7 +55,19 @@ def add_items(items, content=None, end=True):
             url, li, isFolder = item.getListItem()
             if url and li:
                 list_items.append((url, li, isFolder))
-
+    if withNextPage and len(items) > 0:
+        # Add folder for next page
+        try:
+            totalNumberOfItems = items[0]._totalNumberOfItems
+            nextOffset = items[0]._offset + session._config.pageSize
+            if nextOffset < totalNumberOfItems and len(items) >= session._config.pageSize:
+                path = urlsplit(sys.argv[0]).path or '/'
+                path = path.split('/')[:-1]
+                path.append(str(nextOffset))
+                url = '/'.join(path)
+                add_directory(_T(30244).format(pos1=nextOffset, pos2=min(nextOffset+session._config.pageSize, totalNumberOfItems)), plugin.url_for_path(url))
+        except:
+            log('Next Page for URL %s not set' % sys.argv[0], xbmc.LOGERROR)
     xbmcplugin.addDirectoryItems(plugin.handle, list_items)
     if end:
         xbmcplugin.endOfDirectory(plugin.handle)
@@ -62,7 +76,7 @@ def add_items(items, content=None, end=True):
 def add_directory(title, endpoint, thumb=None, fanart=None):
     if callable(endpoint):
         endpoint = plugin.url_for(endpoint)
-    item = FolderItem(title, endpoint)
+    item = FolderItem(title, endpoint, thumb, fanart)
     add_items([item], end=False)
 
 
@@ -123,8 +137,8 @@ def category_item(group, path):
 
 @plugin.route('/category/<group>/<path>/<content_type>/<offset>')
 def category_content(group, path, content_type, offset):
-    items = session.get_category_content(group, path, content_type, offset=int('0%s' % offset))
-    add_items(items, content='musicvideos' if content_type == 'videos' else 'songs')
+    items = session.get_category_content(group, path, content_type, offset=int('0%s' % offset), limit=session._config.pageSize)
+    add_items(items, content='musicvideos' if content_type == 'videos' else 'songs', withNextPage=True)
 
 
 @plugin.route('/track_radio/<track_id>')
@@ -173,6 +187,8 @@ def album_view(album_id):
 
 @plugin.route('/artist/<artist_id>')
 def artist_view(artist_id):
+    if session.is_logged_in:
+        session.user.favorites.load_all()
     artist = session.get_artist(artist_id)
     xbmcplugin.setContent(plugin.handle, 'albums')
     add_directory(_T(30225), plugin.url_for(artist_bio, artist_id), thumb=artist.image, fanart=artist.fanart)
@@ -203,7 +219,7 @@ def artist_bio(artist_id):
         text += '%s:\n\n' % _T(30225) + info.get('text')
     if text:
         xbmcgui.Dialog().textviewer(artist.name, text)
-        xbmc.executebuiltin('Container.Refresh()')
+
 
 @plugin.route('/artist/<artist_id>/top')
 def top_tracks(artist_id):

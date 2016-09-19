@@ -11,6 +11,7 @@
     <string id="30011">Land für lokale Inhalte</string>
     <string id="30012">HiFi</string>
     <string id="30013">Premium</string>
+    <string id="30014">Max. Anzahl Einträge pro Seite</string>
 
     <!-- Video Settings -->
     <string id="30040">Video-Qualität</string>
@@ -83,7 +84,8 @@
     <string id="30239">Zur Playliste hinzufügen...</string>
     <string id="30240">Aus Playliste entfernen</string>
     <string id="30241">Soll Titel Nr. %s aus der Playliste entfernt werden ?</string>
-    <string id="30242">Stream ist gesperrt !</string>
+    <string id="30242">Stream gesperrt</string>
     <string id="30243">Tracks:{tracks} / Videos:{videos}</string>
+    <string id="30244">Nächste Seite ({pos1}-{pos2})</string>
 
 </strings>
