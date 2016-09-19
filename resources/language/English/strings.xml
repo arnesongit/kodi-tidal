@@ -10,6 +10,7 @@
     <string id="30011">Country for Local Media</string>
     <string id="30012">Hifi</string>
     <string id="30013">Premium</string>
+    <string id="30014">Max. number of list items per page</string>
 
     <!-- Video Settings -->
     <string id="30040">Video Quality</string>
@@ -82,7 +83,8 @@
     <string id="30239">Add to Playlist ...</string>
     <string id="30240">Remove from Playlist</string>
     <string id="30241">Are you sure to remove item number %s from this playlist ?</string>
-    <string id="30242">Stream not available !</string>
+    <string id="30242">Stream locked</string>
     <string id="30243">Tracks:{tracks} / Videos:{videos}</string>
+    <string id="30244">Next Page ({pos1}-{pos2})</string>
 
 </strings>
