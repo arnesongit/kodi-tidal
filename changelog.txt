@@ -1,3 +1,7 @@
+[B]1.2.3[/B]
+- Updated tidalapi
+- New FLAC Login-Token for Lossless Playback
+
 [B]1.2.2[/B]
 - Fixed album listing due to site changes
 
