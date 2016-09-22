@@ -27,14 +27,15 @@ import xbmcplugin
 from xbmcgui import ListItem
 from requests import HTTPError
 from lib.tidalapi.models import Quality, Category, BrowsableMedia, SubscriptionType
-from lib.koditidal import plugin, addon, _T, _P, log, KodiLogHandler
+from lib.koditidal import plugin, addon, _T, _P, log, DEBUG_LEVEL, KodiLogHandler
 from lib.koditidal import TidalSession, FolderItem
 
 
 # Set Log Handler for tidalapi
 logger = logging.getLogger()
 logger.addHandler(KodiLogHandler(modules=['lib.tidalapi']))
-# logger.setLevel(logging.DEBUG)
+if DEBUG_LEVEL == xbmc.LOGSEVERE:
+    logger.setLevel(logging.DEBUG)
 
 # This is the Tidal Session
 session = TidalSession()
@@ -325,9 +326,9 @@ def favorites_add(content_type, item_id):
     ok = session.user.favorites.add(content_type, item_id)
     if ok:
         xbmcgui.Dialog().notification(heading=plugin.name, message=_T(30231).format(what=_T(content_type)), icon=xbmcgui.NOTIFICATION_INFO)
-    if content_type == 'artists':
+    #if content_type == 'artists':
         # Refresh the Artist View page
-        xbmc.executebuiltin('Container.Refresh()')
+    xbmc.executebuiltin('Container.Refresh()')
 
 
 @plugin.route('/favorites/remove/<content_type>/<item_id>')
@@ -419,7 +420,7 @@ def play_track(track_id):
         app, playpath = tail.split('/mp4:', 1)
         media_url = 'rtmp://%s app=%s playpath=mp4:%s' % (host, app, playpath)
     li = ListItem(path=media_url)
-    mimetype = 'audio/flac' if session._config.quality == Quality.lossless else 'audio/mpeg'
+    mimetype = 'audio/flac' if session._config.quality == Quality.lossless and session.is_logged_in else 'audio/mpeg'
     li.setProperty('mimetype', mimetype)
     xbmcplugin.setResolvedUrl(plugin.handle, True, li)
 

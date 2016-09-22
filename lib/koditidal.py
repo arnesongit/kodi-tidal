@@ -37,8 +37,9 @@ _addon_id = addon.getAddonInfo('id')
 _addon_icon = os.path.join(addon.getAddonInfo('path'), 'icon.png')
 _addon_fanart = os.path.join(addon.getAddonInfo('path'), 'fanart.jpg')
 
+DEBUG_LEVEL = xbmc.LOGDEBUG
 
-def log(msg, level=xbmc.LOGDEBUG):
+def log(msg, level=DEBUG_LEVEL):
     xbmc.log(("[%s] %s" % (_addon_id, msg)).encode('utf-8'), level=level)
 
 
@@ -206,8 +207,6 @@ class TrackItem(Track, HasListItem):
 
     def getLabel(self):
         label = '%s - %s' % (self.artist.name, self.title)
-        if getattr(self, 'year', None):
-            label += ' (%s)' % self.year
         return label
 
     def getListItem(self):
@@ -225,13 +224,13 @@ class TrackItem(Track, HasListItem):
             'duration': self.duration,
             'artist': self.artist.name,
             'album': self.album.title,
-            'year': self.album.year,
+            'year': self.year,
             'rating': '%s' % int(round(self.popularity / 20.0))
         })
         cm = []
         if self._is_logged_in:
             if self._isFavorite:
-                cm.append((_T(30220), 'RunPlugin(%s)' % plugin.url_for_path('/favorites/remove/%s' % self.id)))
+                cm.append((_T(30220), 'RunPlugin(%s)' % plugin.url_for_path('/favorites/remove/tracks/%s' % self.id)))
             else:
                 cm.append((_T(30219), 'RunPlugin(%s)' % plugin.url_for_path('/favorites/add/tracks/%s' % self.id)))
             if self._is_user_playlist:
@@ -257,8 +256,6 @@ class VideoItem(Video, HasListItem):
 
     def getLabel(self):
         label = '%s - %s' % (self.artist.name, self.title)
-        if getattr(self, 'year', None):
-            label += ' (%s)' % self.year
         return label
 
     def getListItem(self):
