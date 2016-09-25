@@ -87,5 +87,8 @@
     <string id="30242">Stream gesperrt</string>
     <string id="30243">Tracks:{tracks} / Videos:{videos}</string>
     <string id="30244">Nächste Seite ({pos1}-{pos2})</string>
+    <string id="30245">Album anzeigen</string>
+    <string id="30246">Soll dieser Eintrag aus der Playliste entfernt werden ?</string>
+    <string id="30247">Aus '%s' entfernen</string>
 
 </strings>

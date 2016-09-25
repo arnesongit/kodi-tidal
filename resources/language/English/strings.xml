@@ -86,5 +86,8 @@
     <string id="30242">Stream locked</string>
     <string id="30243">Tracks:{tracks} / Videos:{videos}</string>
     <string id="30244">Next Page ({pos1}-{pos2})</string>
+    <string id="30245">Show Album</string>
+    <string id="30246">Are you sure to remove the item from this playlist ?</string>
+    <string id="30247">Remove from '%s'</string>
 
 </strings>
