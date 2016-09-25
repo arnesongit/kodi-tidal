@@ -40,7 +40,7 @@ _addon_fanart = os.path.join(addon.getAddonInfo('path'), 'fanart.jpg')
 DEBUG_LEVEL = xbmc.LOGDEBUG
 
 def log(msg, level=DEBUG_LEVEL):
-    xbmc.log(("[%s] %s" % (_addon_id, msg)).encode('utf-8'), level=level)
+    xbmc.log(("[%s] %s" % (plugin.name, msg)).encode('utf-8'), level=level)
 
 
 def _T(txtid):
@@ -90,7 +90,13 @@ class HasListItem(object):
         # In Favorites View everything is a Favorite
         if self._is_logged_in and hasattr(self, '_isFavorite') and '/favorites/' in sys.argv[0]:
             self._isFavorite = True
+        cm = self.getContextMenuItems()
+        if len(cm) > 0:
+            li.addContextMenuItems(cm)
         return li
+
+    def getContextMenuItems(self):
+        return []
 
 
 class AlbumItem(Album, HasListItem):
@@ -110,10 +116,16 @@ class AlbumItem(Album, HasListItem):
     def getListItem(self):
         li = HasListItem.getListItem(self)
         url = plugin.url_for_path('/album/%s' % self.id)
-        info = {'title': self.title, 'album': self.title, 'artist': self.artist.name}
-        if getattr(self, 'year', None):
-            info['year'] = self.year
-        li.setInfo('music', info)
+        li.setInfo('music', {
+            'title': self.title, 
+            'album': self.title, 
+            'artist': self.artist.name,
+            'year': getattr(self, 'year', None),
+            'tracknumber': self._itemPosition + 1 if self._itemPosition >= 0 else 0
+        })
+        return (url, li, True)
+
+    def getContextMenuItems(self):
         cm = []
         if self._is_logged_in:
             if self._isFavorite:
@@ -121,9 +133,7 @@ class AlbumItem(Album, HasListItem):
             else:
                 cm.append((_T(30219), 'RunPlugin(%s)' % plugin.url_for_path('/favorites/add/albums/%s' % self.id)))
         cm.append((_T(30221), 'Container.Update(%s)' % plugin.url_for_path('/artist/%s' % self.artist.id)))
-        if cm:
-            li.addContextMenuItems(cm)
-        return (url, li, True)
+        return cm
 
 
 class ArtistItem(Artist, HasListItem):
@@ -138,15 +148,16 @@ class ArtistItem(Artist, HasListItem):
         li = HasListItem.getListItem(self)
         url = plugin.url_for_path('/artist/%s' % self.id)
         li.setInfo('music', {'artist': self.name})
+        return (url, li, True)
+
+    def getContextMenuItems(self):
         cm = []
         if self._is_logged_in:
             if self._isFavorite:
                 cm.append((_T(30220), 'RunPlugin(%s)' % plugin.url_for_path('/favorites/remove/artists/%s' % self.id)))
             else:
                 cm.append((_T(30219), 'RunPlugin(%s)' % plugin.url_for_path('/favorites/add/artists/%s' % self.id)))
-        if cm:
-            li.addContextMenuItems(cm)
-        return (url, li, True)
+        return cm
 
 
 class PlaylistItem(Playlist, HasListItem):
@@ -163,8 +174,12 @@ class PlaylistItem(Playlist, HasListItem):
         li.setInfo('music', {
             'artist': self.title,
             'album': self.description,
-            'title': _T(30243).format(tracks=self.numberOfTracks, videos=self.numberOfVideos)
+            'title': _T(30243).format(tracks=self.numberOfTracks, videos=self.numberOfVideos),
+            'tracknumber': self._itemPosition + 1 if self._itemPosition >= 0 else 0
         })
+        return (url, li, True)
+
+    def getContextMenuItems(self):
         cm = []
         if self._is_logged_in:
             if self.type == 'USER':
@@ -175,9 +190,7 @@ class PlaylistItem(Playlist, HasListItem):
                 else:
                     cm.append((_T(30219), 'RunPlugin(%s)' % plugin.url_for_path('/favorites/add/playlists/%s' % self.id)))
             cm.append((_T(30239), 'RunPlugin(%s)' % plugin.url_for_path('/user_playlist/add/playlist/%s' % self.id)))
-        if cm:
-            li.addContextMenuItems(cm)
-        return (url, li, True)
+        return cm
 
     @property
     def image(self):
@@ -209,6 +222,16 @@ class TrackItem(Track, HasListItem):
         label = '%s - %s' % (self.artist.name, self.title)
         return label
 
+    def getFtArtistsText(self):
+        text = ''
+        for item in self._ftArtists:
+            if len(text) > 0:
+                text = text + ', '
+            text = text + item.name
+        if len(text) > 0:
+            text = 'ft. by ' + text
+        return text
+
     def getListItem(self):
         li = HasListItem.getListItem(self)
         if self.available:
@@ -219,29 +242,33 @@ class TrackItem(Track, HasListItem):
             isFolder = True
         li.setInfo('music', {
             'title': self.title,
-            'tracknumber': self._playlist_pos + 1 if self._playlist_id else self.trackNumber,
+            'tracknumber': self._playlist_pos + 1 if self._playlist_id else self._itemPosition + 1 if self._itemPosition >= 0 else self.trackNumber,
             'discnumber': self.volumeNumber,
             'duration': self.duration,
             'artist': self.artist.name,
             'album': self.album.title,
-            'year': self.year,
-            'rating': '%s' % int(round(self.popularity / 20.0))
+            'year': getattr(self, 'year', None),
+            'rating': '%s' % int(round(self.popularity / 20.0)),
+            'comment': self.getFtArtistsText()
         })
+        return (url, li, isFolder)
+
+    def getContextMenuItems(self):
         cm = []
         if self._is_logged_in:
             if self._isFavorite:
                 cm.append((_T(30220), 'RunPlugin(%s)' % plugin.url_for_path('/favorites/remove/tracks/%s' % self.id)))
             else:
                 cm.append((_T(30219), 'RunPlugin(%s)' % plugin.url_for_path('/favorites/add/tracks/%s' % self.id)))
-            if self._is_user_playlist:
+            if self._playlist_type == 'USER':
                 cm.append((_T(30240), 'RunPlugin(%s)' % plugin.url_for_path('/user_playlist/remove/%s/%s' % (self._playlist_id, self._playlist_pos))))
             else:
                 cm.append((_T(30239), 'RunPlugin(%s)' % plugin.url_for_path('/user_playlist/add/track/%s' % self.id)))
         cm.append((_T(30221), 'Container.Update(%s)' % plugin.url_for_path('/artist/%s' % self.artist.id)))
+        cm.append((_T(30245), 'Container.Update(%s)' % plugin.url_for_path('/album/%s' % self.album.id)))
         cm.append((_T(30222), 'Container.Update(%s)' % plugin.url_for_path('/track_radio/%s' % self.id)))
         cm.append((_T(30223), 'Container.Update(%s)' % plugin.url_for_path('/recommended/tracks/%s' % self.id)))
-        li.addContextMenuItems(cm)
-        return (url, li, isFolder)
+        return cm
 
 
 class VideoItem(Video, HasListItem):
@@ -258,6 +285,16 @@ class VideoItem(Video, HasListItem):
         label = '%s - %s' % (self.artist.name, self.title)
         return label
 
+    def getFtArtistsText(self):
+        text = ''
+        for item in self._ftArtists:
+            if len(text) > 0:
+                text = text + ', '
+            text = text + item.name
+        if len(text) > 0:
+            text = 'ft. by ' + text
+        return text
+
     def getListItem(self):
         li = HasListItem.getListItem(self)
         if self.available:
@@ -269,27 +306,29 @@ class VideoItem(Video, HasListItem):
         li.setInfo('video', {
             'artist': [self.artist.name],
             'title': self.title,
-            'tracknumber': self._playlist_pos + 1,
-            'year': self.year,
-            'plotoutline': self.name
+            'tracknumber': self._playlist_pos + 1 if self._playlist_id else self._itemPosition + 1,
+            'year': getattr(self, 'year', None),
+            'plotoutline': self.getFtArtistsText()
         })
         li.addStreamInfo('video', { 'codec': 'h264', 'aspect': 1.78, 'width': 1920,
                          'height': 1080, 'duration': self.duration })
         li.addStreamInfo('audio', { 'codec': 'AAC', 'language': 'en', 'channels': 2 })
+        return (url, li, isFolder)
+
+    def getContextMenuItems(self):
         cm = []
         if self._is_logged_in:
             if self._isFavorite:
                 cm.append((_T(30220), 'RunPlugin(%s)' % plugin.url_for_path('/favorites/remove/videos/%s' % self.id)))
             else:
                 cm.append((_T(30219), 'RunPlugin(%s)' % plugin.url_for_path('/favorites/add/videos/%s' % self.id)))
-            if self._is_user_playlist:
+            if self._playlist_type == 'USER':
                 cm.append((_T(30240), 'RunPlugin(%s)' % plugin.url_for_path('/user_playlist/remove/%s/%s' % (self._playlist_id, self._playlist_pos))))
             else:
                 cm.append((_T(30239), 'RunPlugin(%s)' % plugin.url_for_path('/user_playlist/add/video/%s' % self.id)))
         cm.append((_T(30221), 'Container.Update(%s)' % plugin.url_for_path('/artist/%s' % self.artist.id)))
         cm.append((_T(30224), 'Container.Update(%s)' % plugin.url_for_path('/recommended/videos/%s' % self.id)))
-        li.addContextMenuItems(cm)
-        return (url, li, isFolder)
+        return cm
 
 
 class PromotionItem(Promotion, HasListItem):
@@ -307,14 +346,8 @@ class PromotionItem(Promotion, HasListItem):
     def getListItem(self):
         li = HasListItem.getListItem(self)
         isFolder = True
-        cm = []
         if self.type == 'PLAYLIST':
             url = plugin.url_for_path('/playlist/%s' % self.id)
-            if self._is_logged_in:
-                if self._isFavorite:
-                    cm.append((_T(30220), 'RunPlugin(%s)' % plugin.url_for_path('/favorites/remove/playlists/%s' % self.id)))
-                else:
-                    cm.append((_T(30219), 'RunPlugin(%s)' % plugin.url_for_path('/favorites/add/playlists/%s' % self.id)))
         elif self.type == 'ALBUM':
             url = plugin.url_for_path('/album/%s' % self.id)
             li.setInfo('music', {
@@ -322,11 +355,6 @@ class PromotionItem(Promotion, HasListItem):
                 'album': self.shortSubHeader,
                 'title': self.shortSubHeader
             })
-            if self._is_logged_in:
-                if self._isFavorite:
-                    cm.append((_T(30220), 'RunPlugin(%s)' % plugin.url_for_path('/favorites/remove/albums/%s' % self.id)))
-                else:
-                    cm.append((_T(30219), 'RunPlugin(%s)' % plugin.url_for_path('/favorites/add/albums/%s' % self.id)))
         elif self.type == 'VIDEO':
             url = plugin.url_for_path('/play_video/%s' % self.id)
             li.setInfo('video', {
@@ -338,17 +366,32 @@ class PromotionItem(Promotion, HasListItem):
             li.addStreamInfo('video', { 'codec': 'h264', 'aspect': 1.78, 'width': 1920,
                              'height': 1080, 'duration': self.duration })
             li.addStreamInfo('audio', { 'codec': 'AAC', 'language': 'en', 'channels': 2 })
+        else:
+            return (None, None, False)
+        return (url, li, isFolder)
+
+    def getContextMenuItems(self):
+        cm = []
+        if self.type == 'PLAYLIST':
+            if self._is_logged_in:
+                if self._isFavorite:
+                    cm.append((_T(30220), 'RunPlugin(%s)' % plugin.url_for_path('/favorites/remove/playlists/%s' % self.id)))
+                else:
+                    cm.append((_T(30219), 'RunPlugin(%s)' % plugin.url_for_path('/favorites/add/playlists/%s' % self.id)))
+        elif self.type == 'ALBUM':
+            if self._is_logged_in:
+                if self._isFavorite:
+                    cm.append((_T(30220), 'RunPlugin(%s)' % plugin.url_for_path('/favorites/remove/albums/%s' % self.id)))
+                else:
+                    cm.append((_T(30219), 'RunPlugin(%s)' % plugin.url_for_path('/favorites/add/albums/%s' % self.id)))
+        elif self.type == 'VIDEO':
             if self._is_logged_in:
                 if self._isFavorite:
                     cm.append((_T(30220), 'RunPlugin(%s)' % plugin.url_for_path('/favorites/remove/videos/%s' % self.id)))
                 else:
                     cm.append((_T(30219), 'RunPlugin(%s)' % plugin.url_for_path('/favorites/add/videos/%s' % self.id)))
             cm.append((_T(30224), 'Container.Update(%s)' % plugin.url_for_path('/recommended/videos/%s' % self.id)))
-        else:
-            return (None, None, False)
-        if cm:
-            li.addContextMenuItems(cm)
-        return (url, li, isFolder)
+        return cm
 
 
 class CategoryItem(Category, HasListItem):
@@ -458,6 +501,15 @@ class TidalSession(Session):
         log(path, level=xbmc.LOGDEBUG)
         return Session.request(self, method, path, params=params, data=data, headers=headers)
 
+    def get_album_tracks(self, album_id, withAlbum=True):
+        items = Session.get_album_tracks(self, album_id)
+        if withAlbum:
+            album = self.get_album(album_id)
+            if album:
+                for item in items:
+                    item.album = album
+        return items
+
     def _parse_album(self, json_obj, artist=None):
         album = AlbumItem(Session._parse_album(self, json_obj, artist=artist))
         album._is_logged_in = self.is_logged_in
@@ -559,8 +611,7 @@ class KodiLogHandler(logging.StreamHandler):
     def __init__(self, modules):
         logging.StreamHandler.__init__(self)
         self._modules = modules
-        addon_id = xbmcaddon.Addon().getAddonInfo('name')
-        prefix = b"[%s] " % addon_id
+        prefix = b"[%s] " % plugin.name
         formatter = logging.Formatter(prefix + b'%(name)s: %(message)s')
         self.setFormatter(formatter)
 

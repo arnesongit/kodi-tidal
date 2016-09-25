@@ -69,16 +69,18 @@ def add_items(items, content=None, end=True, withNextPage=False):
                 add_directory(_T(30244).format(pos1=nextOffset, pos2=min(nextOffset+session._config.pageSize, totalNumberOfItems)), plugin.url_for_path(url))
         except:
             log('Next Page for URL %s not set' % sys.argv[0], xbmc.LOGERROR)
-    xbmcplugin.addDirectoryItems(plugin.handle, list_items)
+    if len(list_items) > 0:
+        xbmcplugin.addDirectoryItems(plugin.handle, list_items)
     if end:
         xbmcplugin.endOfDirectory(plugin.handle)
+        xbmc.executebuiltin('Container.SetViewMode(506)')
 
 
-def add_directory(title, endpoint, thumb=None, fanart=None):
+def add_directory(title, endpoint, thumb=None, fanart=None, end=False):
     if callable(endpoint):
         endpoint = plugin.url_for(endpoint)
     item = FolderItem(title, endpoint, thumb, fanart)
-    add_items([item], end=False)
+    add_items([item], end=end)
 
 
 @plugin.route('/')
@@ -91,10 +93,9 @@ def root():
         add_directory(_T(item), plugin.url_for(category, group=item))
     add_directory(_T(30206), search)
     if session.is_logged_in:
-        add_directory(_T(30207), logout)
+        add_directory(_T(30207), logout, end=True)
     else:
-        add_directory(_T(30208), login)
-    xbmcplugin.endOfDirectory(plugin.handle)
+        add_directory(_T(30208), login, end=True)
 
 
 @plugin.route('/category/<group>')
@@ -116,13 +117,12 @@ def category(group):
         # Add Promotions as Folder on the Top if more than 10 Promotions available
         add_directory(_T(30202), plugin.url_for(featured, group=promoGroup))
     # Add Category Items as Folders
-    add_items(items, content=None, end=False)
+    add_items(items, content=None, end=not(promoGroup and totalCount <= 10))
     if promoGroup and totalCount <= 10:
         # Show up to 10 Promotions as single Items
         promoItems = session.get_featured(promoGroup, types=['ALBUM', 'PLAYLIST', 'VIDEO'])
         if promoItems:
-            add_items(promoItems, end=False)
-    xbmcplugin.endOfDirectory(plugin.handle)
+            add_items(promoItems, end=True)
 
 
 @plugin.route('/category/<group>/<path>')
@@ -176,8 +176,7 @@ def my_music():
     add_directory(_T(30215), plugin.url_for(favorites, content_type='albums'))
     add_directory(_T(30216), plugin.url_for(favorites, content_type='playlists'))
     add_directory(_T(30217), plugin.url_for(favorites, content_type='tracks'))
-    add_directory(_T(30218), plugin.url_for(favorites, content_type='videos'))
-    xbmcplugin.endOfDirectory(plugin.handle)
+    add_directory(_T(30218), plugin.url_for(favorites, content_type='videos'), end=True)
 
 
 @plugin.route('/album/<album_id>')
@@ -310,6 +309,21 @@ def user_playlist_remove_item(playlist_id, entry_no):
         xbmc.executebuiltin('Container.Refresh()')
 
 
+@plugin.route('/user_playlist/remove_id/<playlist_id>/<item_id>')
+def user_playlist_remove_id(playlist_id, item_id):
+    dialog = xbmcgui.Dialog()
+    ok = dialog.yesno(_T(30240), _T(30246) )
+    if ok:
+        xbmc.executebuiltin( "ActivateWindow(busydialog)" )
+        try:
+            session.user.remove_playlist_entry(playlist_id, item_id=item_id)
+        except Exception, e:
+            log(str(e), level=xbmc.LOGERROR)
+            traceback.print_exc()
+        xbmc.executebuiltin( "Dialog.Close(busydialog)" )
+        xbmc.executebuiltin('Container.Refresh()')
+
+
 @plugin.route('/favorites/<content_type>')
 def favorites(content_type):
     CONTENT_FOR_TYPE = {'artists': 'artists', 'albums': 'albums', 'playlists': 'albums', 'tracks': 'songs', 'videos': 'musicvideos'}
@@ -345,8 +359,7 @@ def search():
     add_directory(_T(30107), plugin.url_for(search_type, field='album'))
     add_directory(_T(30108), plugin.url_for(search_type, field='playlist'))
     add_directory(_T(30109), plugin.url_for(search_type, field='track'))
-    add_directory(_T(30110), plugin.url_for(search_type, field='video'))
-    xbmcplugin.endOfDirectory(plugin.handle)
+    add_directory(_T(30110), plugin.url_for(search_type, field='video'), end=True)
 
 
 @plugin.route('/search_type/<field>')
