@@ -73,13 +73,12 @@ def add_items(items, content=None, end=True, withNextPage=False):
         xbmcplugin.addDirectoryItems(plugin.handle, list_items)
     if end:
         xbmcplugin.endOfDirectory(plugin.handle)
-        xbmc.executebuiltin('Container.SetViewMode(506)')
 
 
-def add_directory(title, endpoint, thumb=None, fanart=None, end=False):
+def add_directory(title, endpoint, thumb=None, fanart=None, end=False, isFolder=True):
     if callable(endpoint):
         endpoint = plugin.url_for(endpoint)
-    item = FolderItem(title, endpoint, thumb, fanart)
+    item = FolderItem(title, endpoint, thumb, fanart, isFolder)
     add_items([item], end=end)
 
 
@@ -93,9 +92,9 @@ def root():
         add_directory(_T(item), plugin.url_for(category, group=item))
     add_directory(_T(30206), search)
     if session.is_logged_in:
-        add_directory(_T(30207), logout, end=True)
+        add_directory(_T(30207), logout, end=True, isFolder=False)
     else:
-        add_directory(_T(30208), login, end=True)
+        add_directory(_T(30208), login, end=True, isFolder=False)
 
 
 @plugin.route('/category/<group>')
@@ -262,13 +261,13 @@ def user_playlist_delete(playlist_id):
     playlist = session.get_playlist(playlist_id)
     ok = dialog.yesno(_T(30235), _T(30236).format(name=playlist.title, count=playlist.numberOfItems))
     if ok:
-        xbmc.executebuiltin( "ActivateWindow(busydialog)" )
+        xbmc.executebuiltin('ActivateWindow(busydialog)')
         try:
             session.user.delete_playlist(playlist_id)
         except Exception, e:
             log(str(e), level=xbmc.LOGERROR)
             traceback.print_exc()
-        xbmc.executebuiltin( "Dialog.Close(busydialog)" )
+        xbmc.executebuiltin('Dialog.Close(busydialog)')
         xbmc.executebuiltin('Container.Refresh()')
 
 
@@ -283,13 +282,13 @@ def user_playlist_add_item(item_type, item_id):
         items = [item_id]
     playlist = session.selectPlaylistDialog(allowNew=True, item_type=item_type)
     if playlist:
-        xbmc.executebuiltin( "ActivateWindow(busydialog)" )
+        xbmc.executebuiltin('ActivateWindow(busydialog)')
         try:
             session.user.add_playlist_entries(playlist=playlist, item_ids=items)
         except Exception, e:
             log(str(e), level=xbmc.LOGERROR)
             traceback.print_exc()
-        xbmc.executebuiltin( "Dialog.Close(busydialog)" )
+        xbmc.executebuiltin('Dialog.Close(busydialog)')
         xbmc.executebuiltin('Container.Refresh()')
 
 
@@ -297,30 +296,30 @@ def user_playlist_add_item(item_type, item_id):
 def user_playlist_remove_item(playlist_id, entry_no):
     dialog = xbmcgui.Dialog()
     item_no = int('0%s' % entry_no) + 1
-    ok = dialog.yesno(_T(30240), _T(30241) % item_no )
+    ok = dialog.yesno(_T(30240), _T(30241) % item_no)
     if ok:
-        xbmc.executebuiltin( "ActivateWindow(busydialog)" )
+        xbmc.executebuiltin('ActivateWindow(busydialog)')
         try:
             session.user.remove_playlist_entry(playlist_id, entry_no=entry_no)
         except Exception, e:
             log(str(e), level=xbmc.LOGERROR)
             traceback.print_exc()
-        xbmc.executebuiltin( "Dialog.Close(busydialog)" )
+        xbmc.executebuiltin('Dialog.Close(busydialog)')
         xbmc.executebuiltin('Container.Refresh()')
 
 
 @plugin.route('/user_playlist/remove_id/<playlist_id>/<item_id>')
 def user_playlist_remove_id(playlist_id, item_id):
     dialog = xbmcgui.Dialog()
-    ok = dialog.yesno(_T(30240), _T(30246) )
+    ok = dialog.yesno(_T(30240), _T(30246))
     if ok:
-        xbmc.executebuiltin( "ActivateWindow(busydialog)" )
+        xbmc.executebuiltin('ActivateWindow(busydialog)')
         try:
             session.user.remove_playlist_entry(playlist_id, item_id=item_id)
         except Exception, e:
             log(str(e), level=xbmc.LOGERROR)
             traceback.print_exc()
-        xbmc.executebuiltin( "Dialog.Close(busydialog)" )
+        xbmc.executebuiltin('Dialog.Close(busydialog)')
         xbmc.executebuiltin('Container.Refresh()')
 
 
@@ -340,8 +339,6 @@ def favorites_add(content_type, item_id):
     ok = session.user.favorites.add(content_type, item_id)
     if ok:
         xbmcgui.Dialog().notification(heading=plugin.name, message=_T(30231).format(what=_T(content_type)), icon=xbmcgui.NOTIFICATION_INFO)
-    #if content_type == 'artists':
-        # Refresh the Artist View page
     xbmc.executebuiltin('Container.Refresh()')
 
 
@@ -402,6 +399,7 @@ def login():
         addon.setSetting('country_code', session.country_code)
         addon.setSetting('user_id', unicode(session.user.id))
         addon.setSetting('subscription_type', '0' if session.user.subscription.type == SubscriptionType.hifi else '1')
+        addon.setSetting('client_unique_key', session.client_unique_key)
 
         if not addon.getSetting('username') or not addon.getSetting('password'):
             # Ask about remembering username/password
@@ -409,26 +407,24 @@ def login():
             if dialog.yesno(plugin.name, _T(30209)):
                 addon.setSetting('username', username)
                 addon.setSetting('password', password)
-    xbmc.executebuiltin('Container.Refresh()')
+    xbmc.executebuiltin('Container.update(plugin://%s/, True)' % addon.getAddonInfo('id'))
 
 
 @plugin.route('/logout')
 def logout():
     addon.setSetting('session_id', '')
     addon.setSetting('api_session_id', '')
-    # Keep Country Code
-    #addon.setSetting('country_code', '')
     addon.setSetting('user_id', '')
-    # Keep Subscription Type
-    #addon.setSetting('subscription_type', '')
-    xbmc.executebuiltin('Container.Refresh()')
+    xbmc.executebuiltin('Container.update(plugin://%s/, True)' % addon.getAddonInfo('id'))
 
 
 @plugin.route('/play_track/<track_id>')
 def play_track(track_id):
     media_url = session.get_media_url(track_id)
-    if not media_url.startswith('http://') and not media_url.startswith('https://'):
-        log("media url: %s" % media_url)
+    log("Playing: %s" % media_url)
+    if not media_url.startswith('http://') and not media_url.startswith('https://') and \
+        not 'app=' in media_url.lower() and not 'playpath=' in media_url.lower():
+        # Rebuild RTMP URL
         host, tail = media_url.split('/', 1)
         app, playpath = tail.split('/mp4:', 1)
         media_url = 'rtmp://%s app=%s playpath=mp4:%s' % (host, app, playpath)
@@ -441,6 +437,7 @@ def play_track(track_id):
 @plugin.route('/play_video/<video_id>')
 def play_video(video_id):
     media_url = session.get_video_url(video_id)
+    log("Playing: %s" % media_url)
     li = ListItem(path=media_url)
     li.setProperty('mimetype', 'video/mp4')
     xbmcplugin.setResolvedUrl(plugin.handle, True, li)
@@ -457,11 +454,12 @@ if __name__ == '__main__':
     except HTTPError as e:
         r = e.response
         if r.status_code in [401, 403]:
-            xbmcgui.Dialog().notification(plugin.name, _T(30210), xbmcgui.NOTIFICATION_ERROR)
+            msg = _T(30210)
         else:
-            try:
-                msg = r.json().get('userMessage')
-            except:
-                msg = r.reason
-            xbmcgui.Dialog().notification('%s Error %s' % (plugin.name, r.status_code), msg, xbmcgui.NOTIFICATION_ERROR)
+            msg = r.reason
+        try:
+            msg = r.json().get('userMessage')
+        except:
+            pass
+        xbmcgui.Dialog().notification('%s Error %s' % (plugin.name, r.status_code), msg, xbmcgui.NOTIFICATION_ERROR)
         traceback.print_exc()

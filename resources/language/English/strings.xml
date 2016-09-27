@@ -11,6 +11,7 @@
     <string id="30012">Hifi</string>
     <string id="30013">Premium</string>
     <string id="30014">Max. number of list items per page</string>
+    <string id="30015">Unique Client Key</string>
 
     <!-- Video Settings -->
     <string id="30040">Video Quality</string>
