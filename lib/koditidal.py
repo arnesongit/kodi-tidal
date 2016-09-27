@@ -441,11 +441,12 @@ class CategoryItem(Category, HasListItem):
 
 class FolderItem(BrowsableMedia, HasListItem):
 
-    def __init__(self, label, url, thumb=None, fanart=None):
+    def __init__(self, label, url, thumb=None, fanart=None, isFolder=True):
         self.name = label
         self._url = url
         self._thumb = thumb
         self._fanart = fanart
+        self._isFolder = isFolder
 
     def getLabel(self):
         return self.name
@@ -455,7 +456,7 @@ class FolderItem(BrowsableMedia, HasListItem):
         li.setInfo('music', {
             'artist': self.name
         })
-        return (self._url, li, True)
+        return (self._url, li, self._isFolder)
 
     @property
     def image(self):
@@ -478,6 +479,7 @@ class TidalConfig(Config):
         self.country_code = addon.getSetting('country_code')
         self.user_id = addon.getSetting('user_id')
         self.subscription_type = [SubscriptionType.hifi, SubscriptionType.premium][int('0' + addon.getSetting('subscription_type'))]
+        self.client_unique_key = addon.getSetting('client_unique_key')
         self.quality = [Quality.lossless, Quality.high, Quality.low][int('0' + addon.getSetting('quality'))]
         self.maxVideoHeight = [9999, 1080, 720, 540, 480, 360, 240][int('0%s' % addon.getSetting('video_quality'))]
         self.pageSize = max(10, min(999, int('0%s' % addon.getSetting('page_size'))))
@@ -494,8 +496,8 @@ class TidalSession(Session):
         if not self._config.country_code:
             self._config.country_code = self.local_country_code()
             addon.setSetting('country_code', self._config.country_code)
-        Session.load_session(self, self._config.session_id, self._config.country_code, 
-                             self._config.user_id, self._config.subscription_type, self._config.api_session_id)
+        Session.load_session(self, self._config.session_id, self._config.country_code, self._config.user_id, 
+                             self._config.subscription_type, self._config.api_session_id, self._config.client_unique_key)
 
     def request(self, method, path, params=None, data=None, headers=None):
         log(path, level=xbmc.LOGDEBUG)
@@ -586,6 +588,7 @@ class TidalSession(Session):
     def get_video_url(self, video_id):
         url = Session.get_video_url(self, video_id)
         if self._config.maxVideoHeight <> 9999 and url.lower().find('.m3u8') > 0:
+            log('Parsing M3U8 Playlist: %s' % url)
             m3u8obj = m3u8_load(url)
             if m3u8obj.is_variant and not m3u8obj.cookies:
                 # Variant Streams with Cookies have to be played without stream selection.
