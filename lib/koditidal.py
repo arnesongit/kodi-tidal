@@ -19,9 +19,11 @@ from __future__ import unicode_literals
 
 import os, sys, re
 import logging
+from urlparse import urlsplit
 import xbmc
 import xbmcgui
 import xbmcaddon
+import xbmcplugin
 from xbmcgui import ListItem
 from routing import Plugin
 from tidalapi import Config, Session
@@ -473,9 +475,10 @@ class TidalConfig(Config):
 
     def __init__(self):
         Config.__init__(self)
-        # Load Plugin Settings
+        self.load()
+
+    def load(self):
         self.session_id = addon.getSetting('session_id')
-        self.api_session_id = addon.getSetting('api_session_id')
         self.country_code = addon.getSetting('country_code')
         self.user_id = addon.getSetting('user_id')
         self.subscription_type = [SubscriptionType.hifi, SubscriptionType.premium][int('0' + addon.getSetting('subscription_type'))]
@@ -497,11 +500,28 @@ class TidalSession(Session):
             self._config.country_code = self.local_country_code()
             addon.setSetting('country_code', self._config.country_code)
         Session.load_session(self, self._config.session_id, self._config.country_code, self._config.user_id, 
-                             self._config.subscription_type, self._config.api_session_id, self._config.client_unique_key)
+                             self._config.subscription_type, self._config.client_unique_key)
 
-    def request(self, method, path, params=None, data=None, headers=None):
-        log(path, level=xbmc.LOGDEBUG)
-        return Session.request(self, method, path, params=params, data=data, headers=headers)
+    def generate_client_unique_key(self):
+        unique_key = addon.getSetting('client_unique_key')
+        if not unique_key:
+            unique_key = Session.generate_client_unique_key(self)
+        return unique_key
+
+    def login(self, username, password, subscription_type=None):
+        ok = Session.login(self, username, password, subscription_type=subscription_type)
+        if ok:
+            addon.setSetting('session_id', self.session_id)
+            addon.setSetting('country_code', self.country_code)
+            addon.setSetting('user_id', unicode(self.user.id))
+            addon.setSetting('subscription_type', '0' if self.user.subscription.type == SubscriptionType.hifi else '1')
+            addon.setSetting('client_unique_key', self.client_unique_key)
+        return ok
+
+    def logout(self):
+        Session.logout(self)
+        addon.setSetting('session_id', '')
+        addon.setSetting('user_id', '')
 
     def get_album_tracks(self, album_id, withAlbum=True):
         items = Session.get_album_tracks(self, album_id)
@@ -607,6 +627,44 @@ class TidalSession(Session):
                     except:
                         pass
         return url
+
+    def add_list_items(self, items, content=None, end=True, withNextPage=False):
+        if content:
+            xbmcplugin.setContent(plugin.handle, content)
+        list_items = []
+        for item in items:
+            if isinstance(item, Category):
+                category_items = item.getListItems()
+                for url, li, isFolder in category_items:
+                    if url and li:
+                        list_items.append((url, li, isFolder))
+            elif isinstance(item, BrowsableMedia):
+                url, li, isFolder = item.getListItem()
+                if url and li:
+                    list_items.append((url, li, isFolder))
+        if withNextPage and len(items) > 0:
+            # Add folder for next page
+            try:
+                totalNumberOfItems = items[0]._totalNumberOfItems
+                nextOffset = items[0]._offset + self._config.pageSize
+                if nextOffset < totalNumberOfItems and len(items) >= self._config.pageSize:
+                    path = urlsplit(sys.argv[0]).path or '/'
+                    path = path.split('/')[:-1]
+                    path.append(str(nextOffset))
+                    url = '/'.join(path)
+                    self.add_directory_item(_T(30244).format(pos1=nextOffset, pos2=min(nextOffset+self._config.pageSize, totalNumberOfItems)), plugin.url_for_path(url))
+            except:
+                log('Next Page for URL %s not set' % sys.argv[0], xbmc.LOGERROR)
+        if len(list_items) > 0:
+            xbmcplugin.addDirectoryItems(plugin.handle, list_items)
+        if end:
+            xbmcplugin.endOfDirectory(plugin.handle)
+
+    def add_directory_item(self, title, endpoint, thumb=None, fanart=None, end=False, isFolder=True):
+        if callable(endpoint):
+            endpoint = plugin.url_for(endpoint)
+        item = FolderItem(title, endpoint, thumb, fanart, isFolder)
+        self.add_list_items([item], end=end)
 
 
 class KodiLogHandler(logging.StreamHandler):
