@@ -25,7 +25,7 @@ import xbmcplugin
 from xbmcgui import ListItem
 from requests import HTTPError
 from lib import tidalapi
-from lib.tidalapi.models import Album, Artist, Video, Quality, SubscriptionType
+from lib.tidalapi.models import Album, Artist, Video, Quality, SubscriptionType, Promotion
 from routing import Plugin
 
 addon = xbmcaddon.Addon()
@@ -42,11 +42,11 @@ session = tidalapi.Session(config=config)
 
 is_logged_in = False
 _session_id = addon.getSetting('session_id')
-_api_session_id = addon.getSetting('api_session_id')
+_client_unique_key = addon.getSetting('client_unique_key')
 _country_code = addon.getSetting('country_code')
 _user_id = addon.getSetting('user_id')
-if _session_id and _api_session_id and _country_code and _user_id:
-    session.load_session(session_id=_session_id, country_code=_country_code, user_id=_user_id, subscription_type=_subscription_type, api_session_id=_api_session_id)
+if _session_id and _country_code and _user_id:
+    session.load_session(session_id=_session_id, country_code=_country_code, user_id=_user_id, subscription_type=_subscription_type, unique_key=_client_unique_key)
     is_logged_in = True
 
 
@@ -86,10 +86,10 @@ def track_list(tracks, content='songs', end=True):
     for track in tracks:
         if not getattr(track, 'available', True):
             continue
-        label = '%s - %s' % (track.artist.name, track.name)
-        if track.explicit and not 'Explicit' in label:
-            label += ' (Explicit)'
         if isinstance(track, Video):
+            label = '%s - %s' % (track.artist.name, track.name)
+            if track.explicit and not 'Explicit' in label:
+                label += ' (Explicit)'
             url = plugin.url_for(play_video, video_id=track.id)
             li = ListItem(label)
             li.setProperty('isplayable', 'true')
@@ -102,7 +102,23 @@ def track_list(tracks, content='songs', end=True):
             li.addStreamInfo('video', { 'codec': 'h264', 'aspect': 1.78, 'width': 1920,
                              'height': 1080, 'duration': track.duration if session.is_logged_in else 30})
             li.addStreamInfo('audio', { 'codec': 'AAC', 'language': 'en', 'channels': 2 })
+        elif isinstance(track, Promotion):
+            label = track.name
+            url = plugin.url_for(play_video, video_id=track.id)
+            li = ListItem(label)
+            li.setProperty('isplayable', 'true')
+            li.setInfo('video', {
+                'artist': [track.shortHeader],
+                'title': track.shortSubHeader,
+                'plotoutline': track.text
+            })
+            li.addStreamInfo('video', { 'codec': 'h264', 'aspect': 1.78, 'width': 1920,
+                             'height': 1080, 'duration': track.duration if session.is_logged_in else 30})
+            li.addStreamInfo('audio', { 'codec': 'AAC', 'language': 'en', 'channels': 2 })
         else:
+            label = '%s - %s' % (track.artist.name, track.name)
+            if track.explicit and not 'Explicit' in label:
+                label += ' (Explicit)'
             url = plugin.url_for(play_track, track_id=track.id)
             li = ListItem(label)
             li.setProperty('isplayable', 'true')
@@ -230,8 +246,13 @@ def genre_videos(genre_id):
 
 @plugin.route('/featured_playlists')
 def featured_playlists():
-    items = session.get_featured()
-    view(items, urls_from_id(playlist_view, items))
+    items = session.get_featured(group='NEWS', types=['ALBUM', 'PLAYLIST', 'VIDEO'])
+    videos = [item for item in items if item.type == 'VIDEO']
+    playlists = [item for item in items if item.type == 'PLAYLIST']
+    albums = [item for item in items if item.type == 'ALBUM']
+    track_list(videos, content=None, end=False)
+    view(playlists, urls_from_id(playlist_view, playlists), end=False)
+    view(albums, urls_from_id(album_view, albums), end=True)
 
 
 @plugin.route('/whats_new')
@@ -247,6 +268,8 @@ def whats_new():
     add_directory('Top Albums', plugin.url_for(featured, group='top', content_type='albums'))
     add_directory('Top Tracks', plugin.url_for(featured, group='top', content_type='tracks'))
     add_directory('Top Videos', plugin.url_for(featured, group='top', content_type='videos'))
+    add_directory('Exclusive Playlists', plugin.url_for(featured, group='exclusive', content_type='playlists'))
+    add_directory('Exclusive Videos', plugin.url_for(featured, group='exclusive', content_type='videos'))
     if session.country_code != 'US':
         add_directory('Local Playlists', plugin.url_for(featured, group='local', content_type='playlists'))
         add_directory('Local Albums', plugin.url_for(featured, group='local', content_type='albums'))
@@ -394,7 +417,8 @@ def search_type(field):
 def login():
     username = addon.getSetting('username')
     password = addon.getSetting('password')
-    subscription_type = [SubscriptionType.hifi, SubscriptionType.premium][int('0' + addon.getSetting('subscription_type'))]
+    subscription_type = _subscription_type
+    session.client_unique_key = _client_unique_key
 
     if not username or not password:
         # Ask for username/password
@@ -405,13 +429,14 @@ def login():
         password = dialog.input('Password', option=xbmcgui.ALPHANUM_HIDE_INPUT)
         if not password:
             return
-        subscription_type = dialog.select('Subscription Type', [SubscriptionType.hifi, SubscriptionType.premium])
-        if not subscription_type:
+        selected = dialog.select('Subscription Type', [SubscriptionType.hifi, SubscriptionType.premium])
+        if selected < 0:
             return
+        subscription_type = [SubscriptionType.hifi, SubscriptionType.premium][selected]
 
-    if session.login(username, password):
+    if session.login(username, password, subscription_type=subscription_type):
         addon.setSetting('session_id', session.session_id)
-        addon.setSetting('api_session_id', session.api_session_id)
+        addon.setSetting('client_unique_key', session.client_unique_key)
         addon.setSetting('country_code', session.country_code)
         addon.setSetting('user_id', unicode(session.user.id))
         addon.setSetting('subscription_type', '0' if session.user.subscription.type == SubscriptionType.hifi else '1')
@@ -428,12 +453,7 @@ def login():
 @plugin.route('/logout')
 def logout():
     addon.setSetting('session_id', '')
-    addon.setSetting('api_session_id', '')
-    # Keep Country Code
-    #addon.setSetting('country_code', '')
     addon.setSetting('user_id', '')
-    # Keep Subscription Type
-    #addon.setSetting('subscription_type', '')
     xbmc.executebuiltin('XBMC.Container.Refresh()')
 
 
