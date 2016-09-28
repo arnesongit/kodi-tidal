@@ -17,18 +17,16 @@
 
 from __future__ import unicode_literals
 
-import sys
 import traceback
 import logging
-from urlparse import urlsplit
 import xbmc
 import xbmcgui
 import xbmcplugin
 from xbmcgui import ListItem
 from requests import HTTPError
-from lib.tidalapi.models import Quality, Category, BrowsableMedia, SubscriptionType
+from lib.tidalapi.models import Quality, Category, SubscriptionType
 from lib.koditidal import plugin, addon, _T, _P, log, DEBUG_LEVEL, KodiLogHandler
-from lib.koditidal import TidalSession, FolderItem
+from lib.koditidal import TidalSession
 
 
 # Set Log Handler for tidalapi
@@ -41,45 +39,8 @@ if DEBUG_LEVEL == xbmc.LOGSEVERE:
 session = TidalSession()
 session.load_session()
 
-
-def add_items(items, content=None, end=True, withNextPage=False):
-    if content:
-        xbmcplugin.setContent(plugin.handle, content)
-    list_items = []
-    for item in items:
-        if isinstance(item, Category):
-            category_items = item.getListItems()
-            for url, li, isFolder in category_items:
-                if url and li:
-                    list_items.append((url, li, isFolder))
-        elif isinstance(item, BrowsableMedia):
-            url, li, isFolder = item.getListItem()
-            if url and li:
-                list_items.append((url, li, isFolder))
-    if withNextPage and len(items) > 0:
-        # Add folder for next page
-        try:
-            totalNumberOfItems = items[0]._totalNumberOfItems
-            nextOffset = items[0]._offset + session._config.pageSize
-            if nextOffset < totalNumberOfItems and len(items) >= session._config.pageSize:
-                path = urlsplit(sys.argv[0]).path or '/'
-                path = path.split('/')[:-1]
-                path.append(str(nextOffset))
-                url = '/'.join(path)
-                add_directory(_T(30244).format(pos1=nextOffset, pos2=min(nextOffset+session._config.pageSize, totalNumberOfItems)), plugin.url_for_path(url))
-        except:
-            log('Next Page for URL %s not set' % sys.argv[0], xbmc.LOGERROR)
-    if len(list_items) > 0:
-        xbmcplugin.addDirectoryItems(plugin.handle, list_items)
-    if end:
-        xbmcplugin.endOfDirectory(plugin.handle)
-
-
-def add_directory(title, endpoint, thumb=None, fanart=None, end=False, isFolder=True):
-    if callable(endpoint):
-        endpoint = plugin.url_for(endpoint)
-    item = FolderItem(title, endpoint, thumb, fanart, isFolder)
-    add_items([item], end=end)
+add_items = session.add_list_items
+add_directory = session.add_directory_item
 
 
 @plugin.route('/')
@@ -294,9 +255,9 @@ def user_playlist_add_item(item_type, item_id):
 
 @plugin.route('/user_playlist/remove/<playlist_id>/<entry_no>')
 def user_playlist_remove_item(playlist_id, entry_no):
-    dialog = xbmcgui.Dialog()
     item_no = int('0%s' % entry_no) + 1
-    ok = dialog.yesno(_T(30240), _T(30241) % item_no)
+    playlist = session.get_playlist(playlist_id)
+    ok = xbmcgui.Dialog().yesno(_T(30247) % playlist.title, _T(30241) % item_no)
     if ok:
         xbmc.executebuiltin('ActivateWindow(busydialog)')
         try:
@@ -310,8 +271,8 @@ def user_playlist_remove_item(playlist_id, entry_no):
 
 @plugin.route('/user_playlist/remove_id/<playlist_id>/<item_id>')
 def user_playlist_remove_id(playlist_id, item_id):
-    dialog = xbmcgui.Dialog()
-    ok = dialog.yesno(_T(30240), _T(30246))
+    playlist = session.get_playlist(playlist_id)
+    ok = xbmcgui.Dialog().yesno(_T(30247) % playlist.title, _T(30246))
     if ok:
         xbmc.executebuiltin('ActivateWindow(busydialog)')
         try:
@@ -389,32 +350,24 @@ def login():
         password = dialog.input(_T(30009), option=xbmcgui.ALPHANUM_HIDE_INPUT)
         if not password:
             return
-        subscription_type = dialog.select(_T(30010), [SubscriptionType.hifi, SubscriptionType.premium])
-        if not subscription_type:
+        selected = dialog.select(_T(30010), [SubscriptionType.hifi, SubscriptionType.premium])
+        if selected < 0:
             return
+        subscription_type = [SubscriptionType.hifi, SubscriptionType.premium][selected]
 
-    if session.login(username, password, subscription_type):
-        addon.setSetting('session_id', session.session_id)
-        addon.setSetting('api_session_id', session.api_session_id)
-        addon.setSetting('country_code', session.country_code)
-        addon.setSetting('user_id', unicode(session.user.id))
-        addon.setSetting('subscription_type', '0' if session.user.subscription.type == SubscriptionType.hifi else '1')
-        addon.setSetting('client_unique_key', session.client_unique_key)
-
-        if not addon.getSetting('username') or not addon.getSetting('password'):
-            # Ask about remembering username/password
-            dialog = xbmcgui.Dialog()
-            if dialog.yesno(plugin.name, _T(30209)):
-                addon.setSetting('username', username)
-                addon.setSetting('password', password)
+    ok = session.login(username, password, subscription_type)
+    if ok and (not addon.getSetting('username') or not addon.getSetting('password')):
+        # Ask about remembering username/password
+        dialog = xbmcgui.Dialog()
+        if dialog.yesno(plugin.name, _T(30209)):
+            addon.setSetting('username', username)
+            addon.setSetting('password', password)
     xbmc.executebuiltin('Container.update(plugin://%s/, True)' % addon.getAddonInfo('id'))
 
 
 @plugin.route('/logout')
 def logout():
-    addon.setSetting('session_id', '')
-    addon.setSetting('api_session_id', '')
-    addon.setSetting('user_id', '')
+    session.logout()
     xbmc.executebuiltin('Container.update(plugin://%s/, True)' % addon.getAddonInfo('id'))
 
 

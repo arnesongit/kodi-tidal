@@ -6,7 +6,6 @@
     <setting label="30009" id="password" type="text" option="hidden" default=""/>
     <setting label="30011" id="country_code" type="text" default=""/>
     <setting label="30010" id="subscription_type" type="select" lvalues="30012|30013" default="0"/>
-    <setting label="30015" id="session_id" type="text" default="" visible="false"/>
-    <setting label="30015" id="client_unique_key" type="text" default="" enable="eq(-1,)"/>
+    <setting label="30015" id="client_unique_key" type="text" default=""/>
     <setting label="30014" id="page_size" type="number" default="999"/>
 </settings>
