@@ -1,9 +1,10 @@
 [B]1.3.0[/B]
-- Changed FLAC Login-Token
-- Fallback to API Login-Token if FLAC Login-Token doesn't work
+- Using new Login-Token for all content
 - Added Video playback
 - Seperate settings for Subscription Type, Music Quality and Video Quality
 - Added Support to edit Favorites and User Playlists
+- Mark Favorites in Labels (bold)
+- Append names of User Playlists to the Labels of Tracks and Videos
 - Added Recommended Tracks/Videos to context menue
 - Added Artist Bio on artist page
 - Added Setting "Max. number of list items per page"
