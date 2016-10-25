@@ -1,4 +1,9 @@
-[B]1.3.0[/B]
+[B]1.3.0-beta5[/B]
+- User Playlist can be renamed now
+- Context Menu Function "Open Playlist (Audio only)" for Playlists containing videos
+- Fixed problem in Search function for Krypton
+
+[B]1.3.0-beta4[/B]
 - Using new Login-Token for all content
 - Added Video playback
 - Seperate settings for Subscription Type, Music Quality and Video Quality

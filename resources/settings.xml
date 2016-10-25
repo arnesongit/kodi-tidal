@@ -10,4 +10,8 @@
     <setting label="30015" id="client_unique_key" type="text" default=""/>
     <setting label="30014" id="page_size" type="number" default="999"/>
   </category>
+  <category label="30002">
+    <setting label="30016" id="favorites_in_labels" type="bool" default="true"/>
+    <setting label="30017" id="user_playlists_in_labels" type="bool" default="true"/>
+  </category>
 </settings>

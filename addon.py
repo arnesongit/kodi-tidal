@@ -25,9 +25,8 @@ import xbmcplugin
 from xbmcgui import ListItem
 from requests import HTTPError
 from lib.tidalapi.models import Quality, Category, SubscriptionType
-from lib.koditidal import plugin, addon, _addon_id, _T, _P, log, DEBUG_LEVEL, KodiLogHandler
+from lib.koditidal import plugin, addon, _addon_id, _T, log, DEBUG_LEVEL, KodiLogHandler
 from lib.koditidal import TidalSession
-
 
 # Set Log Handler for tidalapi
 logger = logging.getLogger()
@@ -75,7 +74,7 @@ def category(group):
     xbmcplugin.setContent(plugin.handle, 'files')
     if promoGroup and totalCount > 10:
         # Add Promotions as Folder on the Top if more than 10 Promotions available
-        add_directory(_T(30202), plugin.url_for(featured, group=promoGroup))
+        add_directory(_T(30120), plugin.url_for(featured, group=promoGroup))
     # Add Category Items as Folders
     add_items(items, content=None, end=not(promoGroup and totalCount <= 10))
     if promoGroup and totalCount <= 10:
@@ -151,17 +150,17 @@ def artist_view(artist_id):
         session.user.favorites.load_all()
     artist = session.get_artist(artist_id)
     xbmcplugin.setContent(plugin.handle, 'albums')
-    add_directory(_T(30225), plugin.url_for(artist_bio, artist_id), thumb=artist.image, fanart=artist.fanart)
+    add_directory(_T(30225), plugin.url_for(artist_bio, artist_id), thumb=artist.image, fanart=artist.fanart, isFolder=False)
     add_directory(_T(30226), plugin.url_for(top_tracks, artist_id), thumb=artist.image, fanart=artist.fanart)
-    add_directory(_P('videos'), plugin.url_for(artist_videos, artist_id), thumb=artist.image, fanart=artist.fanart)
+    add_directory(_T(30110), plugin.url_for(artist_videos, artist_id), thumb=artist.image, fanart=artist.fanart)
     add_directory(_T(30227), plugin.url_for(artist_radio, artist_id), thumb=artist.image, fanart=artist.fanart)
     add_directory(_T(30228), plugin.url_for(artist_playlists, artist_id), thumb=artist.image, fanart=artist.fanart)
     add_directory(_T(30229), plugin.url_for(similar_artists, artist_id), thumb=artist.image, fanart=artist.fanart)
     if session.is_logged_in:
         if session.user.favorites.isFavoriteArtist(artist_id):
-            add_directory(_T(30220), plugin.url_for(favorites_remove, content_type='artists', item_id=artist_id), thumb=artist.image, fanart=artist.fanart)
+            add_directory(_T(30220), plugin.url_for(favorites_remove, content_type='artists', item_id=artist_id), thumb=artist.image, fanart=artist.fanart, isFolder=False)
         else:
-            add_directory(_T(30219), plugin.url_for(favorites_add, content_type='artists', item_id=artist_id), thumb=artist.image, fanart=artist.fanart)
+            add_directory(_T(30219), plugin.url_for(favorites_add, content_type='artists', item_id=artist_id), thumb=artist.image, fanart=artist.fanart, isFolder=False)
     albums = session.get_artist_albums(artist_id) + \
              session.get_artist_albums_ep_singles(artist_id) + \
              session.get_artist_albums_other(artist_id)
@@ -211,9 +210,22 @@ def playlist_view(playlist_id):
     add_items(session.get_playlist_items(playlist_id), content='songs')
 
 
+@plugin.route('/playlist/tracks/<playlist_id>')
+def playlist_tracks(playlist_id):
+    add_items(session.get_playlist_tracks(playlist_id), content='songs')
+
+
 @plugin.route('/user_playlists')
 def user_playlists():
     add_items(session.user.playlists(), content='songs')
+
+
+@plugin.route('/user_playlist/rename/<playlist_id>')
+def user_playlist_rename(playlist_id):
+    playlist = session.get_playlist(playlist_id)
+    ok = session.user.renamePlaylistDialog(playlist)
+    if ok:
+        xbmc.executebuiltin('Container.Refresh()')
 
 
 @plugin.route('/user_playlist/delete/<playlist_id>')
@@ -398,7 +410,7 @@ def cache_reset():
 def cache_reload():
     if not session.is_logged_in:
         return
-    session.user.favorites.load_all()
+    session.user.favorites.load_all(force_reload=True)
     session.user.load_cache()
     session.user.playlists()
 
@@ -455,6 +467,8 @@ def favorite_toggle():
 
 @plugin.route('/search')
 def search():
+    addon.setSetting('last_search_field', '')
+    addon.setSetting('last_search_text', '')
     add_directory(_T(30106), plugin.url_for(search_type, field='artist'))
     add_directory(_T(30107), plugin.url_for(search_type, field='album'))
     add_directory(_T(30108), plugin.url_for(search_type, field='playlist'))
@@ -464,17 +478,27 @@ def search():
 
 @plugin.route('/search_type/<field>')
 def search_type(field):
-    keyboard = xbmc.Keyboard('', _T(30206))
-    keyboard.doModal()
-    if keyboard.isConfirmed():
-        keyboardinput = keyboard.getText()
-        if keyboardinput:
-            searchresults = session.search(field, keyboardinput)
-            add_items(searchresults.artists, content='files', end=False)
-            add_items(searchresults.albums, end=False)
-            add_items(searchresults.playlists, end=False)
-            add_items(searchresults.tracks, end=False)
-            add_items(searchresults.videos, end=True)
+    last_field = addon.getSetting('last_search_field').decode('utf-8')
+    search_text = addon.getSetting('last_search_text').decode('utf-8')
+    if last_field <> field or not search_text:
+        addon.setSetting('last_search_field', field)
+        keyboard = xbmc.Keyboard('', _T(30206))
+        keyboard.doModal()
+        if keyboard.isConfirmed():
+            search_text = keyboard.getText()
+        else:
+            search_text = ''
+    addon.setSetting('last_search_text', search_text)
+    if search_text:
+        searchresults = session.search(field, search_text)
+        add_items(searchresults.artists, content='files', end=False)
+        add_items(searchresults.albums, end=False)
+        add_items(searchresults.playlists, end=False)
+        add_items(searchresults.tracks, end=False)
+        add_items(searchresults.videos, end=True)
+    else:
+        #xbmcplugin.setContent(plugin.handle, content='files')
+        xbmcplugin.endOfDirectory(plugin.handle, succeeded=False, updateListing=False)
 
 
 @plugin.route('/login')

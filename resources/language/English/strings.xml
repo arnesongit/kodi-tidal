@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <strings>
     <string id="30001">General</string>
+    <string id="30002">Extended</string>
     <string id="30004">Music Quality</string>
     <string id="30005">Lossless (FLAC)</string>
     <string id="30006">High (320 kBit/s)</string>
@@ -13,6 +14,8 @@
     <string id="30013">Premium</string>
     <string id="30014">Max. number of list items per page</string>
     <string id="30015">Unique Client Key</string>
+    <string id="30016">Mark Favorites in Labels</string>
+    <string id="30017">Append User Paylist Names to Labels</string>
 
     <!-- Video Settings -->
     <string id="30040">Video Quality</string>
@@ -44,6 +47,7 @@
     <string id="30117">Genres</string>
     <string id="30118">Moods</string>
     <string id="30119">Top 20</string>
+    <string id="30120">Promotions</string>
 
     <!-- Main Menu -->
     <string id="30201">My Music</string>
@@ -76,7 +80,7 @@
     <string id="30230">Summary</string>
     <string id="30231">Added {what}</string>
     <string id="30232">Removed {what}</string>
-    <string id="30233">Name of new Playlist</string>
+    <string id="30233">Name of the Playlist</string>
     <string id="30234">Description (optional)</string>
     <string id="30235">Delete Playlist</string>
     <string id="30236">Playlist "{name}" contains {count} items. Are you sure to delete this playlist ?</string>
@@ -94,5 +98,7 @@
     <string id="30248">Move to Playlist ...</string>
     <string id="30249">Set as Default %s Playlist</string>
     <string id="30250">Reset Default %s Playlist</string>
+    <string id="30251">Rename Playlist</string>
+    <string id="30252">Open Playlist (Audio only)"</string>
 
 </strings>
