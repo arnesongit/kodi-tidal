@@ -58,13 +58,19 @@ def view(data_items, urls, end=True):
     list_items = []
     for item, url in zip(data_items, urls):
         info = {'title': item.name}
-        li = ListItem(item.name if not isinstance(item, Album) else '%s - %s' % (item.artist.name, item.title))
         if isinstance(item, Album):
+            li = ListItem('%s - %s' % (item.artist.name, item.title))
             info.update({'album': item.name, 'artist': item.artist.name})
             if getattr(item, 'year', None):
                 info['year'] = item.year
+        elif isinstance(item, Promotion):
+            li = ListItem('%s - %s' % (item.shortHeader, item.shortSubHeader))
+            info.update({'album': item.shortSubHeader, 'artist': item.shortHeader})
         elif isinstance(item, Artist):
+            li = ListItem(item.name)
             info.update({'artist': item.name})
+        else:
+            li = ListItem(item.name)
         li.setInfo('music', info)
         artwork = {}
         if getattr(item, 'image', None):
@@ -103,7 +109,7 @@ def track_list(tracks, content='songs', end=True):
                              'height': 1080, 'duration': track.duration if session.is_logged_in else 30})
             li.addStreamInfo('audio', { 'codec': 'AAC', 'language': 'en', 'channels': 2 })
         elif isinstance(track, Promotion):
-            label = track.name
+            label = '%s - %s' % (track.shortHeader, track.shortSubHeader)
             url = plugin.url_for(play_video, video_id=track.id)
             li = ListItem(label)
             li.setProperty('isplayable', 'true')
@@ -129,7 +135,7 @@ def track_list(tracks, content='songs', end=True):
                 'duration': track.duration if session.is_logged_in else 30,
                 'artist': track.artist.name,
                 'album': track.album.title,
-                'year': track.album.year,
+                'year': track.year,
             })
             radio_url = plugin.url_for(track_radio, track_id=track.id)
             li.addContextMenuItems(
@@ -162,6 +168,7 @@ def root():
     if is_logged_in:
         add_directory('My Music', my_music)
     add_directory('Featured Playlists', featured_playlists)
+    add_directory('Featured Videos', featured_videos)
     add_directory("What's New", whats_new)
     add_directory('Movies', movies)
     add_directory('Shows', shows)
@@ -246,13 +253,17 @@ def genre_videos(genre_id):
 
 @plugin.route('/featured_playlists')
 def featured_playlists():
-    items = session.get_featured(group='NEWS', types=['ALBUM', 'PLAYLIST', 'VIDEO'])
-    videos = [item for item in items if item.type == 'VIDEO']
+    items = session.get_featured(group='NEWS', types=['ALBUM', 'PLAYLIST'])
     playlists = [item for item in items if item.type == 'PLAYLIST']
     albums = [item for item in items if item.type == 'ALBUM']
-    track_list(videos, content=None, end=False)
     view(playlists, urls_from_id(playlist_view, playlists), end=False)
     view(albums, urls_from_id(album_view, albums), end=True)
+
+
+@plugin.route('/featured_videos')
+def featured_videos():
+    items = session.get_featured(group='NEWS', types=['VIDEO'])
+    track_list(items, content='musicvideos', end=True)
 
 
 @plugin.route('/whats_new')
@@ -317,6 +328,10 @@ def artist_view(artist_id):
         ListItem('Top Tracks'), True
     )
     xbmcplugin.addDirectoryItem(
+        plugin.handle, plugin.url_for(artist_videos, artist_id),
+        ListItem('Artist Videos'), True
+    )
+    xbmcplugin.addDirectoryItem(
         plugin.handle, plugin.url_for(artist_radio, artist_id),
         ListItem('Artist Radio'), True
     )
@@ -338,6 +353,11 @@ def artist_radio(artist_id):
 @plugin.route('/artist/<artist_id>/top')
 def top_tracks(artist_id):
     track_list(session.get_artist_top_tracks(artist_id))
+
+
+@plugin.route('/artist/<artist_id>/videos')
+def artist_videos(artist_id):
+    track_list(session.get_artist_videos(artist_id))
 
 
 @plugin.route('/artist/<artist_id>/similar')

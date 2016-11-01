@@ -1,7 +1,7 @@
 [B]1.2.3[/B]
 - Updated tidalapi
-- Different Settings for Subscription Type and Music Quality
-- New FLAC Login-Token
+- Different settings for Subscription Type and Music Quality
+- Fixed login problem with new universal Login-Token
 - Added Video Playback
 - Added Artist fanart background image
 - Trial-Mode (30 seconds playback without login)
