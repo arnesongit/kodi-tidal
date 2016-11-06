@@ -317,7 +317,16 @@ def my_music():
 @plugin.route('/album/<album_id>')
 def album_view(album_id):
     xbmcplugin.addSortMethod(plugin.handle, xbmcplugin.SORT_METHOD_TRACKNUM)
+    album = session.get_album(album_id)
+    if album and album.numberOfVideos > 0:
+        add_directory('Videos', plugin.url_for(album_videos, album_id=album_id))
     track_list(session.get_album_tracks(album_id))
+
+
+@plugin.route('/album_videos/<album_id>')
+def album_videos(album_id):
+    xbmcplugin.addSortMethod(plugin.handle, xbmcplugin.SORT_METHOD_TRACKNUM)
+    track_list(session.get_album_items(album_id, ret='videos'))
 
 
 @plugin.route('/artist/<artist_id>')
