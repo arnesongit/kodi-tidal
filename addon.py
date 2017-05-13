@@ -181,6 +181,7 @@ def featured_playlists():
 
 @plugin.route('/whats_new')
 def whats_new():
+    add_directory('Master Albums', plugin.url_for(master, group='recommended', content_type='albums'))
     add_directory('Recommended Playlists', plugin.url_for(featured, group='recommended', content_type='playlists'))
     add_directory('Recommended Albums', plugin.url_for(featured, group='recommended', content_type='albums'))
     add_directory('Recommended Tracks', plugin.url_for(featured, group='recommended', content_type='tracks'))
@@ -194,6 +195,13 @@ def whats_new():
         add_directory('Local Albums', plugin.url_for(featured, group='local', content_type='albums'))
         add_directory('Local Tracks', plugin.url_for(featured, group='local', content_type='tracks'))
     xbmcplugin.endOfDirectory(plugin.handle)
+
+
+@plugin.route('/master/<group>/<content_type>')
+def master(group=None, content_type=None):
+    items = session._map_request('/'.join(['master', group, content_type]), ret=content_type)
+    xbmcplugin.setContent(plugin.handle, 'albums')
+    view(items, urls_from_id(album_view, items))
 
 
 @plugin.route('/featured/<group>/<content_type>')
